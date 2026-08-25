@@ -1,0 +1,25 @@
+# Ambiente Python
+.venv/
+__pycache__/
+*.pyc
+
+# Estensione Raycast
+raycast/node_modules/
+raycast/dist/
+
+# Binario OCR compilato
+indicizzatore/vocr
+prova/vocr
+
+# MAI nel repo: indice, testo dei documenti, configurazione locale.
+# L'indice contiene il testo integrale di ciò che hai indicizzato.
+*.sqlite
+*.sqlite-*
+*.npy
+*.meta.jsonl
+chunk*.jsonl
+configurazione.json
+
+# Documenti di misura non sanificati
+documenti-privati/
+AMBIENTE.md

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Modello di LaunchAgent: NON installato.
+     Per attivarlo:
+       cp servizio/io.rayrag.plist ~/Library/LaunchAgents/
+       launchctl load ~/Library/LaunchAgents/io.rayrag.plist
+     Per fermarlo:
+       launchctl unload ~/Library/LaunchAgents/io.rayrag.plist -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>io.rayrag</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>__RADICE__/servizio/avvia.sh</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+    <key>StandardOutPath</key>
+    <string>__CASA__/.rayrag/servizio.log</string>
+    <key>StandardErrorPath</key>
+    <string>__CASA__/.rayrag/servizio.err</string>
+</dict>
+</plist>

@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RayRAG — gestione indice</title>
+<style>
+  :root {
+    --sfondo: #f7f7f5; --carta: #fff; --testo: #1a1a18; --tenue: #6b6b66;
+    --bordo: #e2e2dd; --accento: #0e4c6e; --accento-chiaro: #5ac0d6;
+    --ok: #2f7d4f; --attenzione: #9a6b00;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --sfondo: #16181a; --carta: #1e2124; --testo: #e8e8e4; --tenue: #9a9a94;
+            --bordo: #2e3236; --accento: #5ac0d6; --accento-chiaro: #7fd4e6;
+            --ok: #5fc98a; --attenzione: #d6a83c; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--sfondo); color: var(--testo); line-height: 1.5; }
+  .contenitore { max-width: 940px; margin: 0 auto; padding: 32px 20px 64px; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+  h2 { font-size: 1rem; margin: 32px 0 12px; font-weight: 600; }
+  .sottotitolo { color: var(--tenue); font-size: 0.9rem; margin: 0 0 24px; }
+  .griglia { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .riquadro { background: var(--carta); border: 1px solid var(--bordo); border-radius: 10px; padding: 16px; }
+  .numero { font-size: 1.7rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .etichetta { color: var(--tenue); font-size: 0.8rem; text-transform: lowercase; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th { text-align: left; font-weight: 600; color: var(--tenue); font-size: 0.78rem;
+       text-transform: uppercase; letter-spacing: 0.04em; padding: 8px 10px; }
+  td { padding: 8px 10px; border-top: 1px solid var(--bordo); font-variant-numeric: tabular-nums; }
+  td.nome { font-variant-numeric: normal; }
+  .scorrevole { overflow-x: auto; background: var(--carta); border: 1px solid var(--bordo); border-radius: 10px; }
+  textarea { width: 100%; min-height: 150px; padding: 12px; border-radius: 10px; font-size: 0.85rem;
+             border: 1px solid var(--bordo); background: var(--carta); color: var(--testo);
+             font-family: ui-monospace, SFMono-Regular, Menlo, monospace; resize: vertical; }
+  button { font: inherit; font-weight: 500; padding: 9px 16px; border-radius: 8px; cursor: pointer;
+           border: 1px solid var(--accento); background: var(--accento); color: #fff; }
+  button.secondario { background: transparent; color: var(--accento); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .barra { display: flex; gap: 10px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
+  .esito { font-size: 0.85rem; color: var(--ok); }
+  .esito.male { color: var(--attenzione); }
+  .pallino { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-right: 6px; }
+  .pallino.fermo { background: var(--tenue); }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85em; }
+  .percorso { color: var(--tenue); font-size: 0.8rem; }
+  label.estensione { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="contenitore">
+  <h1>RayRAG</h1>
+  <p class="sottotitolo">Gestione dell'indice: cosa c'è dentro, cosa indicizzare, cosa saltare.</p>
+
+  <div class="griglia" id="riquadri"></div>
+
+  <h2>Indicizzazione</h2>
+  <div class="riquadro">
+    <div id="stato-indicizzatore"><span class="pallino fermo"></span>caricamento…</div>
+    <div class="barra">
+      <button id="avvia">Indicizza ora</button>
+      <button class="secondario" id="aggiorna">Aggiorna stato</button>
+      <span class="esito" id="esito-indicizzazione"></span>
+    </div>
+  </div>
+
+  <h2>Estensioni</h2>
+  <p class="sottotitolo">Spunta quelle da indicizzare. Le colonne mostrano cosa c'è già nell'indice.</p>
+  <div class="scorrevole">
+    <table>
+      <thead><tr><th>Indicizza</th><th>Estensione</th><th>File</th><th>Chunk</th><th>Da OCR</th></tr></thead>
+      <tbody id="tabella-estensioni"></tbody>
+    </table>
+  </div>
+
+  <h2>Cartelle da escludere</h2>
+  <p class="sottotitolo">Una regola per riga, stile <code>.gitignore</code>. La barra finale indica una cartella.</p>
+  <textarea id="esclusioni" spellcheck="false"></textarea>
+
+  <h2>Cartelle indicizzate</h2>
+  <textarea id="radici" spellcheck="false" style="min-height:70px"></textarea>
+
+  <div class="barra">
+    <button id="salva">Salva configurazione</button>
+    <span class="esito" id="esito-salvataggio"></span>
+  </div>
+
+  <h2>File più ingombranti</h2>
+  <p class="sottotitolo">Un solo file che occupa gran parte dell'indice ne sporca i risultati.</p>
+  <div class="scorrevole">
+    <table>
+      <thead><tr><th>Chunk</th><th>File</th></tr></thead>
+      <tbody id="tabella-grandi"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let stato = null;
+
+// Tutte le estensioni che l'estrattore sa leggere, anche se ora disattivate.
+const CONOSCIUTE = [".pdf", ".docx", ".xlsx", ".pptx", ".numbers", ".key", ".doc",
+  ".html", ".htm", ".eml", ".msg", ".txt", ".md", ".xml", ".csv",
+  ".png", ".jpg", ".jpeg", ".tiff", ".tif", ".heic"];
+
+function riquadro(numero, etichetta) {
+  return `<div class="riquadro"><div class="numero">${numero}</div><div class="etichetta">${etichetta}</div></div>`;
+}
+
+function disegna() {
+  const c = stato.conteggi || { file: stato.file, chunk: stato.chunk, da_ocr: 0 };
+  $("riquadri").innerHTML =
+    riquadro(c.file.toLocaleString("it"), "file indicizzati") +
+    riquadro(c.chunk.toLocaleString("it"), "chunk") +
+    riquadro(c.da_ocr ?? 0, "letti con OCR") +
+    riquadro(stato.duplicati ?? 0, "documenti in più copie");
+
+  const ind = stato.indicizzatore || {};
+  const inCorso = ind.in_corso === "1";
+  const dettaglio = inCorso
+    ? `${ind.file_fatti || 0} file elaborati — ${ind.ultimo_file || ""}`
+    : (ind.completato_a ? `ultima esecuzione: ${ind.completato_a}` : "mai eseguito da questo pannello");
+  $("stato-indicizzatore").innerHTML =
+    `<span class="pallino ${inCorso ? "" : "fermo"}"></span>` +
+    (inCorso ? "in corso — " : "fermo — ") + dettaglio;
+  $("avvia").disabled = inCorso;
+
+  const attive = new Set(stato.configurazione.estensioni_attive);
+  const perEst = {};
+  (stato.per_estensione || []).forEach((r) => (perEst[r.estensione] = r));
+  const tutte = [...new Set([...CONOSCIUTE, ...Object.keys(perEst)])].sort();
+  $("tabella-estensioni").innerHTML = tutte.map((e) => {
+    const r = perEst[e] || { file: 0, chunk: 0, ocr: 0 };
+    return `<tr>
+      <td><label class="estensione"><input type="checkbox" data-est="${e}" ${attive.has(e) ? "checked" : ""}></label></td>
+      <td class="nome"><code>${e}</code></td>
+      <td>${r.file || ""}</td><td>${r.chunk || ""}</td><td>${r.ocr || ""}</td></tr>`;
+  }).join("");
+
+  $("esclusioni").value = stato.configurazione.esclusioni.join("\n");
+  $("radici").value = stato.configurazione.radici.join("\n");
+
+  $("tabella-grandi").innerHTML = (stato.piu_grandi || []).map((f) => {
+    const nome = f.percorso.split("/").pop();
+    const cartella = f.percorso.slice(0, f.percorso.length - nome.length - 1);
+    return `<tr><td>${f.chunk}</td><td class="nome">${nome}<div class="percorso">${cartella}</div></td></tr>`;
+  }).join("");
+}
+
+async function carica() {
+  const r = await fetch("/api/stato");
+  stato = await r.json();
+  disegna();
+}
+
+$("salva").onclick = async () => {
+  const attive = [...document.querySelectorAll("[data-est]")]
+    .filter((c) => c.checked).map((c) => c.dataset.est);
+  const corpo = {
+    estensioni_attive: attive,
+    esclusioni: $("esclusioni").value.split("\n").map((s) => s.trim()).filter(Boolean),
+    radici: $("radici").value.split("\n").map((s) => s.trim()).filter(Boolean),
+  };
+  const r = await fetch("/api/config", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(corpo),
+  });
+  const esito = $("esito-salvataggio");
+  if (r.ok) {
+    esito.className = "esito";
+    esito.textContent = "salvato — vale dalla prossima indicizzazione";
+    await carica();
+  } else {
+    esito.className = "esito male";
+    esito.textContent = "errore nel salvataggio";
+  }
+  setTimeout(() => (esito.textContent = ""), 5000);
+};
+
+$("avvia").onclick = async () => {
+  const r = await fetch("/api/indicizza", { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: "{}" });
+  const esito = $("esito-indicizzazione");
+  esito.className = r.ok ? "esito" : "esito male";
+  esito.textContent = r.ok ? "avviata" : "impossibile avviarla";
+  setTimeout(carica, 1500);
+};
+
+$("aggiorna").onclick = carica;
+carica();
+setInterval(() => { if (stato?.indicizzatore?.in_corso === "1") carica(); }, 4000);
+</script>
+</body>
+</html>
