@@ -79,7 +79,16 @@ class Sorgente:
         self.carica()
 
     def _firma(self):
-        return self.percorso.stat().st_mtime if self.percorso.exists() else None
+        """In modalità WAL le scritture recenti stanno nel file -wal finché SQLite
+        non le consolida: guardare solo il file principale le perde per un po'."""
+        firma = []
+        for f in (self.percorso, self.percorso.with_name(self.percorso.name + "-wal")):
+            try:
+                s = f.stat()
+                firma.append((s.st_mtime, s.st_size))
+            except OSError:
+                firma.append(None)
+        return tuple(firma)
 
     def carica(self):
         self.m, self.meta = self.dep.carica()
@@ -182,6 +191,10 @@ def crea_handler(indice: Indice):
             par = urllib.parse.parse_qs(url.query)
 
             if url.path == "/salute":
+                # Senza ricaricare, /salute descriveva l'indice com'era all'avvio del
+                # servizio: a indicizzazione in corso diceva 0 chunk mentre la ricerca,
+                # che ricarica, ne vedeva centinaia.
+                indice.aggiorna_se_serve()
                 return self._rispondi(200, {
                     "stato": "attivo",
                     "chunk": int(indice.m.shape[0]),
