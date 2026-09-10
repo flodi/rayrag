@@ -28,7 +28,7 @@ from pathlib import Path
 
 import configurazione
 from deposito import Deposito
-from estrattore import ESTENSIONI, estrai
+from estrattore import ESTENSIONI, IMMAGINI, estrai
 
 OLLAMA = "http://localhost:11434/api/embed"
 MODELLO = "bge-m3"
@@ -159,7 +159,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("radici", nargs="*")
     ap.add_argument("--deposito", default="~/.rayrag/indice.sqlite")
-    ap.add_argument("--vocr", default=str(Path(__file__).parent.parent / "prova/vocr"))
+    ap.add_argument("--vocr", default=str(Path(__file__).parent / "vocr"))
     ap.add_argument("--esclusioni", default=str(Path(__file__).parent / ".rayragignore"))
     ap.add_argument("--attendi-ollama", type=int, default=0,
                     help="secondi di attesa perché Ollama risponda (per l'avvio automatico)")
@@ -193,6 +193,7 @@ def main():
         print("nota: vocr non compilato, i PDF scansionati verranno saltati", file=sys.stderr)
 
     visti, nuovi, invariati, copie, errori, n_chunk = set(), 0, 0, 0, 0, 0
+    rimandati = 0
     tipi_saltati = Counter()
     dep.imposta_stato(in_corso=1, avviato_a=time.strftime("%Y-%m-%d %H:%M"),
                       file_fatti=0, ultimo_file="")
@@ -217,6 +218,12 @@ def main():
             imp = impronta(p)
             chunk, da_ocr = estrai(p, vocr)
             if not chunk:
+                if vocr is None and (p.suffix.lower() in IMMAGINI or p.suffix.lower() == ".pdf"):
+                    # Senza OCR non si può dire se il file è vuoto o se è una scansione.
+                    # Registrarlo lo segnerebbe come fatto, e non verrebbe mai più
+                    # riprovato nemmeno dopo aver compilato vocr: meglio rimandarlo.
+                    rimandati += 1
+                    continue
                 dep.salva(percorso, st.st_mtime, st.st_size, imp, [], [])
                 continue
 
@@ -265,6 +272,8 @@ def main():
     for s in spariti[:10]:
         print(f"      {s}")
     print(f"  errori             : {errori}")
+    if rimandati:
+        print(f"  rimandati (serve OCR, vocr assente): {rimandati}")
     if tipi_saltati:
         n = sum(tipi_saltati.values())
         print(f"  tipo non gestito   : {n} file — " + ", ".join(

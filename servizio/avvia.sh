@@ -6,10 +6,10 @@ set -euo pipefail
 RADICE="$(cd "$(dirname "$0")/.." && pwd)"
 DEPOSITO="${1:-$HOME/.rayrag/indice.sqlite}"
 
-if [ ! -f "$DEPOSITO" ]; then
-  echo "deposito assente: $DEPOSITO — costruiscilo con indicizzatore/indicizza.py" >&2
-  exit 1
-fi
+# Nessun controllo sull'esistenza del deposito: su un'installazione nuova non c'è
+# ancora, e uscire qui farebbe entrare launchd in un ciclo di riavvii proprio mentre
+# l'indicizzatore lo sta creando. Il servizio parte con l'indice vuoto e lo ricarica
+# da solo quando il file cambia.
 # Ollama serve solo al momento della query, non all'avvio: se non c'è ancora
 # (tipico al login, prima che parta il suo agent) si avvisa e si prosegue.
 # Uscire qui farebbe entrare launchd in un ciclo di riavvii.
