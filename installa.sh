@@ -13,6 +13,13 @@ command -v ollama  >/dev/null || { echo "Serve Ollama: https://ollama.com" >&2; 
 command -v swiftc  >/dev/null || echo "  swiftc assente: niente OCR (installa gli strumenti da riga di comando di Xcode)"
 
 dimmi "2/5  Ambiente Python"
+# Un venv NON è spostabile: gli script in bin/ hanno il percorso assoluto nello
+# shebang, quindi se la cartella del progetto viene spostata pip smette di funzionare
+# mentre python sembra a posto. Si verifica invece di fidarsi dell'esistenza.
+if [ -d "$RADICE/.venv" ] && ! "$RADICE/.venv/bin/pip" --version >/dev/null 2>&1; then
+  echo "  il venv esistente è rotto (progetto spostato?): lo ricreo"
+  rm -rf "$RADICE/.venv"
+fi
 [ -d "$RADICE/.venv" ] || python3 -m venv "$RADICE/.venv"
 "$RADICE/.venv/bin/pip" install -q --upgrade pip
 "$RADICE/.venv/bin/pip" install -q -r "$RADICE/requirements.txt"

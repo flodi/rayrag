@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Indicizzazione all'avvio del Mac. Un solo giro, incrementale: rifà solo
-     ciò che è cambiato. Attende fino a 3 minuti che Ollama sia pronto. -->
+<!-- Indicizzazione all'avvio del Mac e poi ogni sei ore. Incrementale: un giro a
+     vuoto dura pochi secondi, quindi la cadenza costa quasi nulla.
+     Perché anche a intervallo e non solo al boot: su una macchina che resta
+     accesa per settimane, un solo tentativo al boot significa che se Ollama non
+     è ancora pronto l'indice non si aggiorna più fino al riavvio successivo.
+     È accaduto: dodici giorni di modifiche non indicizzate.
+     L'attesa di Ollama è a 10 minuti perché l'app parte al login, non prima. -->
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -11,10 +16,12 @@
         <string>__RADICE__/.venv/bin/python</string>
         <string>__RADICE__/indicizzatore/indicizza.py</string>
         <string>--attendi-ollama</string>
-        <string>180</string>
+        <string>600</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
+    <key>StartInterval</key>
+    <integer>21600</integer>
     <key>StandardOutPath</key>
     <string>__CASA__/.rayrag/indicizzazione.log</string>
     <key>StandardErrorPath</key>
