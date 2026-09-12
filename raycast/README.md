@@ -17,6 +17,11 @@ cd raycast && npm install && npm run dev
 scorciatoia (Impostazioni → Extensions → RayRAG → Record Hotkey). È quella scorciatoia il
 requisito del progetto, non l'estensione in sé.
 
+**Va lanciato una volta sola.** La registrazione resta anche dopo aver chiuso il terminale:
+verificato fermando il watcher e ricontrollando che il comando fosse ancora presente e
+restituisse risultati. Il watcher serve soltanto a ricaricare l'estensione mentre ne
+modifichi il codice, non a tenerla in vita.
+
 ## Uso
 
 | tasto | azione |
