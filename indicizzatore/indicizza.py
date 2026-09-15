@@ -213,21 +213,21 @@ def main():
                       file_fatti=0, ultimo_file="")
     inizio = time.time()
 
-    for p in candidati(radici, escl, tipi_saltati, attive, pacchetti_office):
-        if fermare:
-            break
+    def elabora(p: Path, forza: bool = False) -> None:
+        """Un file dall'estrazione al salvataggio. `forza` salta il controllo di
+        data e dimensione: serve per rifare gli orfani, che non sono cambiati."""
+        nonlocal nuovi, invariati, copie, errori, n_chunk, rimandati
         percorso = str(p)
-        visti.add(percorso)
         try:
             st = p.stat()
         except OSError:
-            continue
+            return
 
         ver = versione(p.suffix)
-        if not dep.da_rifare(percorso, st.st_mtime, st.st_size, ver):
+        if not forza and not dep.da_rifare(percorso, st.st_mtime, st.st_size, ver):
             dep.segna_visto(percorso)
             invariati += 1
-            continue
+            return
 
         try:
             imp = impronta(p)
@@ -238,9 +238,9 @@ def main():
                     # Registrarlo lo segnerebbe come fatto, e non verrebbe mai più
                     # riprovato nemmeno dopo aver compilato vocr: meglio rimandarlo.
                     rimandati += 1
-                    continue
+                    return
                 dep.salva(percorso, st.st_mtime, st.st_size, imp, [], [], versione=ver)
-                continue
+                return
 
             # L'identità del documento è il suo testo, non i suoi byte: lo stesso PDF
             # risalvato ha byte diversi e testo identico. Si estrae sempre (costa poco),
@@ -250,7 +250,7 @@ def main():
                 dep.salva(percorso, st.st_mtime, st.st_size, imp, [], [],
                           impronta_testo=imp_testo, versione=ver)
                 copie += 1
-                continue
+                return
 
             attendi_se_si_cerca()
             vettori = []
@@ -271,7 +271,24 @@ def main():
             errori += 1
             print(f"  errore su {p.name}: {type(e).__name__}: {e}", file=sys.stderr)
 
+    for p in candidati(radici, escl, tipi_saltati, attive, pacchetti_office):
+        if fermare:
+            break
+        visti.add(str(p))
+        elabora(p)
+
     spariti = dep.rimuovi_spariti(visti) if not fermare else []
+
+    # Solo dopo aver tolto gli spariti si sa quali copie sono rimaste senza gemello:
+    # si rifanno subito, nello stesso giro, invece di lasciarle fuori dalla ricerca.
+    orfani_rifatti = 0
+    compattati = (0, 0)
+    if not fermare:
+        for percorso in dep.orfani():
+            if Path(percorso).exists():
+                elabora(Path(percorso), forza=True)
+                orfani_rifatti += 1
+        compattati = dep.compatta_duplicati()
     dep.imposta_stato(in_corso=0, completato_a=time.strftime("%Y-%m-%d %H:%M"),
                       file_fatti=nuovi, chunk_fatti=n_chunk,
                       interrotto=int(bool(fermare)))
@@ -287,6 +304,10 @@ def main():
     for s in spariti[:10]:
         print(f"      {s}")
     print(f"  errori             : {errori}")
+    if orfani_rifatti:
+        print(f"  copie rimaste senza gemello, rifatte: {orfani_rifatti}")
+    if compattati[0]:
+        print(f"  duplicati compattati: {compattati[0]} documenti, {compattati[1]} chunk tolti")
     if pacchetti_office:
         print(f"  pacchetti Office aperti saltati: {len(pacchetti_office)}")
         for cartella in pacchetti_office[:5]:

@@ -146,6 +146,49 @@ class Deposito:
                     "DELETE FROM file WHERE percorso=?", [(p,) for p in spariti])
         return spariti
 
+    def orfani(self) -> list[str]:
+        """File registrati come copia di un documento che non ha più chunk da nessuna parte.
+
+        Una copia viene salvata senza chunk perché il suo gemello li ha già. Se poi il
+        gemello sparisce dal disco, la copia resta con zero chunk e con data, dimensione
+        e versione invariate: l'indicizzatore non la rifarebbe mai, e il documento
+        uscirebbe dalla ricerca pur esistendo ancora.
+        """
+        with self._lucchetto:
+            return [r[0] for r in self.db.execute(
+                "SELECT f.percorso FROM file f"
+                " WHERE f.n_chunk=0 AND f.impronta_testo<>''"
+                " AND NOT EXISTS (SELECT 1 FROM file g"
+                "   WHERE g.impronta_testo=f.impronta_testo AND g.n_chunk>0)"
+                " ORDER BY f.percorso")]
+
+    def compatta_duplicati(self) -> tuple[int, int]:
+        """Nei gruppi di file con lo stesso testo lascia i chunk a una copia sola.
+
+        Serve agli indici nati prima che la deduplica guardasse il testo: lì le copie
+        risalvate con byte diversi erano state incorporate tutte. La copia che resta è
+        la prima in ordine di percorso, così la scelta non dipende dall'ordine in cui
+        il disco è stato letto. Restituisce (gruppi compattati, chunk tolti).
+        """
+        with self._lucchetto:
+            gruppi = [r[0] for r in self.db.execute(
+                "SELECT impronta_testo FROM file WHERE n_chunk>0 AND impronta_testo<>''"
+                " GROUP BY impronta_testo HAVING COUNT(*)>1")]
+            tolti = 0
+            if not gruppi:
+                return 0, 0
+            with self.db:
+                self.db.execute("BEGIN")
+                for imp in gruppi:
+                    percorsi = [r[0] for r in self.db.execute(
+                        "SELECT percorso FROM file WHERE impronta_testo=? AND n_chunk>0"
+                        " ORDER BY percorso", (imp,))]
+                    for p in percorsi[1:]:
+                        tolti += self.db.execute(
+                            "DELETE FROM chunk WHERE percorso=?", (p,)).rowcount
+                        self.db.execute("UPDATE file SET n_chunk=0 WHERE percorso=?", (p,))
+        return len(gruppi), tolti
+
     def riempi_impronte_testo(self) -> int:
         """Calcola l'impronta del testo per i file indicizzati prima che esistesse.
 
@@ -179,6 +222,15 @@ class Deposito:
             {"path": r[0], "chunk": r[1], "testo": r[2], "impronta": r[4]} for r in righe
         ]
         return m, meta
+
+    def copie_per_impronta(self) -> dict[str, int]:
+        """Quanti file condividono ogni testo. Va chiesto all'elenco dei file e non
+        ai chunk: le copie vengono salvate senza chunk, quindi fra i risultati di una
+        ricerca non compaiono mai e non si possono contare da lì."""
+        with self._lucchetto:
+            return {imp: n for imp, n in self.db.execute(
+                "SELECT impronta_testo, COUNT(*) FROM file WHERE impronta_testo<>''"
+                " GROUP BY impronta_testo HAVING COUNT(*)>1")}
 
     def conteggi(self):
         with self._lucchetto:

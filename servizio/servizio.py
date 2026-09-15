@@ -92,6 +92,7 @@ class Sorgente:
 
     def carica(self):
         self.m, self.meta = self.dep.carica()
+        self.copie = self.dep.copie_per_impronta()
         self.firma = self._firma()
 
     def aggiorna_se_serve(self):
@@ -142,7 +143,8 @@ def cerca(indice, q: str, quanti: int, stacco: float = STACCO):
             "cartella": str(Path(path).parent),
             "punteggio": round(p, 4),
             "frammento": frammento(indice.meta[i]["testo"]),
-            "copie": 0,
+            # Le copie senza chunk non arrivano mai fin qui: si contano dall'elenco dei file.
+            "copie": max(getattr(indice, "copie", {}).get(chiave, 1) - 1, 0),
         }
         visti[chiave] = voce
         risultati.append(voce)
