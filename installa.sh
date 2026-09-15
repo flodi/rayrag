@@ -34,9 +34,22 @@ else
 fi
 
 dimmi "4/5  OCR"
-if command -v swiftc >/dev/null; then
-  swiftc -O -o "$RADICE/indicizzatore/vocr" "$RADICE/indicizzatore/vocr.swift"
+# Si compila su un nome provvisorio: una compilazione fallita non deve cancellare un
+# vocr che già funziona. E non deve interrompere l'installazione — con set -e lo
+# farebbe, e gli agenti del passo 5 non verrebbero mai rigenerati. Succede davvero:
+# dopo un aggiornamento di Xcode, swiftc rifiuta di partire finché non si accetta
+# la licenza.
+VOCR="$RADICE/indicizzatore/vocr"
+if command -v swiftc >/dev/null && swiftc -O -o "$VOCR.nuovo" "$RADICE/indicizzatore/vocr.swift" 2>/dev/null; then
+  mv "$VOCR.nuovo" "$VOCR"
   echo "  vocr compilato"
+elif [ -x "$VOCR" ]; then
+  rm -f "$VOCR.nuovo"
+  echo "  compilazione non riuscita: uso il vocr già presente"
+  echo "  (se è la licenza di Xcode: sudo xcodebuild -license accept)"
+else
+  echo "  compilazione non riuscita e nessun vocr presente: l'OCR resta spento"
+  echo "  (se è la licenza di Xcode: sudo xcodebuild -license accept, poi rilancia)"
 fi
 
 dimmi "5/5  Avvio automatico"
