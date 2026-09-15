@@ -60,12 +60,18 @@ class Deposito:
         if "impronta_testo" not in colonne:  # deposito creato prima del 24 agosto
             self.db.execute(
                 "ALTER TABLE file ADD COLUMN impronta_testo TEXT NOT NULL DEFAULT ''")
+        if "versione" not in colonne:  # deposito creato prima del 15 settembre
+            # I file già indicizzati valgono come versione "1": altrimenti l'aggiunta
+            # della colonna farebbe rifare l'intero indice, OCR ed embedding compresi.
+            self.db.execute(
+                "ALTER TABLE file ADD COLUMN versione TEXT NOT NULL DEFAULT '1'")
         self.db.execute(
             "CREATE INDEX IF NOT EXISTS idx_file_impronta_testo ON file(impronta_testo)")
 
     # --- interrogazioni usate dall'indicizzatore -------------------------------
 
-    def da_rifare(self, percorso: str, mtime: float, dimensione: int) -> bool:
+    def da_rifare(self, percorso: str, mtime: float, dimensione: int,
+                  versione: str = "1") -> bool:
         """Un file va rifatto se non c'è, o se mtime/dimensione non combaciano.
 
         L'impronta non si calcola qui: leggere ogni file per intero a ogni giro
@@ -73,11 +79,11 @@ class Deposito:
         """
         with self._lucchetto:
             r = self.db.execute(
-                "SELECT mtime, dimensione FROM file WHERE percorso=?", (percorso,)
+                "SELECT mtime, dimensione, versione FROM file WHERE percorso=?", (percorso,)
             ).fetchone()
         if r is None:
             return True
-        return abs(r[0] - mtime) > 1e-6 or r[1] != dimensione
+        return abs(r[0] - mtime) > 1e-6 or r[1] != dimensione or r[2] != versione
 
     def gemello(self, impronta_testo: str, escluso: str) -> str | None:
         """Un altro file già indicizzato con lo STESSO TESTO, se esiste.
@@ -102,7 +108,7 @@ class Deposito:
     # --- scrittura ------------------------------------------------------------
 
     def salva(self, percorso, mtime, dimensione, impronta, chunk, vettori,
-              ocr=False, impronta_testo=""):
+              ocr=False, impronta_testo="", versione="1"):
         """Sostituisce in blocco i chunk di un file. Transazione unica: o tutto o niente."""
         m = np.asarray(vettori, dtype=np.float32)
         if m.size:
@@ -112,13 +118,14 @@ class Deposito:
             self.db.execute("DELETE FROM chunk WHERE percorso=?", (percorso,))
             self.db.execute(
                 "INSERT INTO file(percorso, mtime, dimensione, impronta, impronta_testo,"
-                " n_chunk, ocr, visto_a) VALUES(?,?,?,?,?,?,?,?)"
+                " n_chunk, ocr, visto_a, versione) VALUES(?,?,?,?,?,?,?,?,?)"
                 " ON CONFLICT(percorso) DO UPDATE SET"
                 " mtime=excluded.mtime, dimensione=excluded.dimensione,"
                 " impronta=excluded.impronta, impronta_testo=excluded.impronta_testo,"
-                " n_chunk=excluded.n_chunk, ocr=excluded.ocr, visto_a=excluded.visto_a",
+                " n_chunk=excluded.n_chunk, ocr=excluded.ocr, visto_a=excluded.visto_a,"
+                " versione=excluded.versione",
                 (percorso, mtime, dimensione, impronta, impronta_testo,
-                 len(chunk), int(ocr), time.time()),
+                 len(chunk), int(ocr), time.time(), versione),
             )
             self.db.executemany(
                 "INSERT INTO chunk(percorso, n, testo, vettore) VALUES(?,?,?,?)",

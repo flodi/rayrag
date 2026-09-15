@@ -144,12 +144,40 @@ def _testo(p: Path) -> str:
     return p.read_text(encoding="utf-8", errors="replace")
 
 
+def _xml(p: Path) -> str:
+    """Solo il testo, senza tag.
+
+    Nell'archivio reale gli XML che contano sono fatture elettroniche e i
+    datiatto.xml del deposito telematico: letti come testo grezzo finivano
+    nell'indice come markup, e un chunk di tag non somiglia a nessuna domanda.
+    """
+    import xml.etree.ElementTree as ET
+
+    try:
+        radice = ET.parse(p).getroot()
+        pezzi = (s.strip() for s in radice.itertext())
+        return "\n".join(s for s in pezzi if s)
+    except ET.ParseError:
+        # XML malformato: si tolgono i tag a mano piuttosto che perdere il file.
+        return _strip_html(p.read_text(encoding="utf-8", errors="replace"))
+
+
 ESTRATTORI = {
     ".pdf": _pdf, ".docx": _docx, ".xlsx": _xlsx, ".pptx": _pptx,
     ".numbers": _numbers, ".doc": _textutil, ".html": _textutil, ".htm": _textutil,
     ".eml": _eml, ".msg": _msg,
-    ".txt": _testo, ".md": _testo, ".xml": _testo, ".csv": _testo,
+    ".txt": _testo, ".md": _testo, ".xml": _xml, ".csv": _testo,
 }
+
+# Versione dell'estrattore per estensione. Va incrementata quando un estrattore
+# cambia in modo da produrre testo diverso: l'indicizzatore rifà da solo i file di
+# quell'estensione, invece di tenerli com'erano finché qualcuno non li modifica.
+VERSIONI = {".xml": "2"}
+
+
+def versione(suffisso: str) -> str:
+    return VERSIONI.get(suffisso.lower(), "1")
+
 
 # Riconosciute con Vision: nel corpus sono quasi tutte scansioni di documenti.
 IMMAGINI = {".png", ".jpg", ".jpeg", ".tiff", ".tif", ".heic"}

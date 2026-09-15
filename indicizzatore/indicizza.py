@@ -28,7 +28,7 @@ from pathlib import Path
 
 import configurazione
 from deposito import Deposito
-from estrattore import ESTENSIONI, IMMAGINI, estrai
+from estrattore import ESTENSIONI, IMMAGINI, estrai, versione
 
 OLLAMA = "http://localhost:11434/api/embed"
 MODELLO = "bge-m3"
@@ -132,7 +132,11 @@ def a_batteria() -> bool:
         return False
 
 
-def candidati(radici, escl: Esclusioni, saltati=None, attive=None):
+# Firma di un documento Office (.docx, .xlsx, .pptx) aperto come cartella.
+FIRMA_OFFICE = "[Content_Types].xml"
+
+
+def candidati(radici, escl: Esclusioni, saltati=None, attive=None, pacchetti=None):
     """`saltati` raccoglie le estensioni non gestite: vanno dette, non nascoste.
 
     Uno zip che sparisce dall'indice senza una riga di resoconto è indistinguibile
@@ -141,6 +145,15 @@ def candidati(radici, escl: Esclusioni, saltati=None, attive=None):
     for radice in radici:
         radice = Path(radice).expanduser()
         for cartella, sottocartelle, file in os.walk(radice):
+            if FIRMA_OFFICE in file:
+                # Un PowerPoint scompattato ha prodotto due slide XML da 5000 chunk,
+                # il 52% dell'indice, fatte di solo markup. Il documento vero, se c'è,
+                # è il .pptx: la sua carcassa non va indicizzata. Criterio sul contenuto
+                # e non sul nome, perché "ppt/" o "word/" possono essere cartelle vere.
+                sottocartelle[:] = []
+                if pacchetti is not None:
+                    pacchetti.append(cartella)
+                continue
             sottocartelle[:] = [
                 d for d in sottocartelle
                 if not d.startswith(".") and not escl.esclusa_cartella(d)
@@ -194,12 +207,13 @@ def main():
 
     visti, nuovi, invariati, copie, errori, n_chunk = set(), 0, 0, 0, 0, 0
     rimandati = 0
+    pacchetti_office = []
     tipi_saltati = Counter()
     dep.imposta_stato(in_corso=1, avviato_a=time.strftime("%Y-%m-%d %H:%M"),
                       file_fatti=0, ultimo_file="")
     inizio = time.time()
 
-    for p in candidati(radici, escl, tipi_saltati, attive):
+    for p in candidati(radici, escl, tipi_saltati, attive, pacchetti_office):
         if fermare:
             break
         percorso = str(p)
@@ -209,7 +223,8 @@ def main():
         except OSError:
             continue
 
-        if not dep.da_rifare(percorso, st.st_mtime, st.st_size):
+        ver = versione(p.suffix)
+        if not dep.da_rifare(percorso, st.st_mtime, st.st_size, ver):
             dep.segna_visto(percorso)
             invariati += 1
             continue
@@ -224,7 +239,7 @@ def main():
                     # riprovato nemmeno dopo aver compilato vocr: meglio rimandarlo.
                     rimandati += 1
                     continue
-                dep.salva(percorso, st.st_mtime, st.st_size, imp, [], [])
+                dep.salva(percorso, st.st_mtime, st.st_size, imp, [], [], versione=ver)
                 continue
 
             # L'identità del documento è il suo testo, non i suoi byte: lo stesso PDF
@@ -233,7 +248,7 @@ def main():
             imp_testo = hashlib.sha256("".join(chunk).encode()).hexdigest()
             if dep.gemello(imp_testo, percorso):
                 dep.salva(percorso, st.st_mtime, st.st_size, imp, [], [],
-                          impronta_testo=imp_testo)
+                          impronta_testo=imp_testo, versione=ver)
                 copie += 1
                 continue
 
@@ -244,7 +259,7 @@ def main():
                 attendi_se_si_cerca()
 
             dep.salva(percorso, st.st_mtime, st.st_size, imp, chunk, vettori, da_ocr,
-                      impronta_testo=imp_testo)
+                      impronta_testo=imp_testo, versione=ver)
             nuovi += 1
             n_chunk += len(chunk)
             dep.imposta_stato(file_fatti=nuovi, ultimo_file=p.name[:80], chunk_fatti=n_chunk)
@@ -272,6 +287,10 @@ def main():
     for s in spariti[:10]:
         print(f"      {s}")
     print(f"  errori             : {errori}")
+    if pacchetti_office:
+        print(f"  pacchetti Office aperti saltati: {len(pacchetti_office)}")
+        for cartella in pacchetti_office[:5]:
+            print(f"      {cartella}")
     if rimandati:
         print(f"  rimandati (serve OCR, vocr assente): {rimandati}")
     if tipi_saltati:
