@@ -1,3 +1,6 @@
+# Robaccia del Finder
+.DS_Store
+
 # Ambiente Python
 .venv/
 __pycache__/
