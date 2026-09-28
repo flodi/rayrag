@@ -155,6 +155,7 @@ def cerca(indice, q: str, quanti: int, stacco: float = STACCO):
 
 RADICE = Path(__file__).resolve().parent
 PANNELLO = RADICE / "pannello.html"
+ICONE = RADICE / "icone"
 
 
 def stato_completo(indice) -> dict:
@@ -212,6 +213,22 @@ def crea_handler(indice: Indice):
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(corpo)))
+                self.end_headers()
+                self.wfile.write(corpo)
+                return
+
+            if url.path.startswith("/icone/"):
+                # Solo i file di quella cartella, scelti per nome esatto: un percorso
+                # che arriva dalla rete non deve poter indicare niente altro sul disco.
+                nome = Path(url.path).name
+                f = ICONE / nome
+                if nome not in {x.name for x in ICONE.glob("*.png")} or not f.is_file():
+                    return self._rispondi(404, {"errore": "icona sconosciuta"})
+                corpo = f.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Content-Length", str(len(corpo)))
+                self.send_header("Cache-Control", "max-age=86400")
                 self.end_headers()
                 self.wfile.write(corpo)
                 return

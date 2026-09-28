@@ -23,3 +23,6 @@ configurazione.json
 # Documenti di misura non sanificati
 documenti-privati/
 AMBIENTE.md
+
+# Esportazione sorgente delle icone: nel repo stanno i PNG, non l'archivio
+assets/*.zip
