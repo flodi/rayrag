@@ -217,6 +217,11 @@ def crea_handler(indice: Indice):
                 self.wfile.write(corpo)
                 return
 
+            if url.path in ("/favicon.ico", "/favicon.png"):
+                # I browser lo chiedono da soli, prima di leggere i <link> della pagina,
+                # e un 404 se lo tengono in cache restando sull'icona predefinita.
+                url = url._replace(path="/icone/favicon-32.png")
+
             if url.path.startswith("/icone/"):
                 # Solo i file di quella cartella, scelti per nome esatto: un percorso
                 # che arriva dalla rete non deve poter indicare niente altro sul disco.
