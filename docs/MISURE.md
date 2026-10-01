@@ -211,3 +211,58 @@ un compromesso arbitrario. Si disattiva per singola ricerca con `&stacco=0`.
 Gli script sono in [`prova/`](../prova). Servono un archivio di documenti e Ollama con
 `bge-m3`. Il banco di prova va adattato ai tuoi documenti: le query di collaudo e i file
 attesi stanno in cima a `prova/cerca.py`.
+
+
+## 9. Cercare un nome proprio: il limite del denso, e la regola che lo chiude
+
+Cercando `overace` — un progetto citato **una sola volta** in tutto l'archivio, in un
+inciso dentro un dossier legale — la ricerca restituiva documenti senza alcun rapporto.
+Il documento giusto stava al **posto 45 su 652**, con 0,387 contro lo 0,462 del primo.
+
+È il recupero denso nella sua forma più sfavorevole: una parola rara **da sola**, senza
+concetto intorno. Il vettore non somiglia a niente, e il chunk che la contiene parla
+d'altro. Quando non c'è nulla da somigliare il denso ordina lo stesso tutti i file, e in
+cima finisce il meno dissimile — cioè rumore.
+
+### Perché non basta premiare i token rari
+
+Primo tentativo: portare in cima i file che contengono un token presente in meno dell'1%
+dei file. Misurato:
+
+| query | denso | con il ripescaggio |
+|---|---|---|
+| overace | 45 | **1** |
+| cosa devo pagare al fisco | 1 | **2** |
+| documenti della mia automobile | 1 | **4** |
+| permesso di soggiorno per lavoro | 1 | **3** |
+
+Aiuta il nome proprio e peggiora tre query su sette. Il motivo: in *questo* archivio
+«fisco» compare in un file, «automobile» in tre, «soggiorno» in due. Sono parole italiane
+comuni che qui sono rare, e trattarle da identificatori ripesca file che non c'entrano.
+È la stessa patologia di agosto, innescata in modo diverso: **raro ≠ nome proprio**.
+
+### La regola che funziona
+
+Il ripescaggio scatta solo se **ogni** termine della query è raro — cioè se l'utente ha
+scritto un identificatore e non una domanda — e al più tre termini. In quel caso si
+risponde con i soli file che contengono il termine, perché la coda densa sarebbe rumore.
+
+| query | denso | regola stretta | scatta? |
+|---|---|---|---|
+| overace | 45 | **1** | sì |
+| bomi | 116 | **3** | sì |
+| contratti profondoblu | 1 | 1 | no |
+| cosa devo pagare al fisco | 1 | 1 | no |
+| documenti della mia automobile | 1 | 1 | no |
+| il bilancio della mia società | 1 | 1 | no |
+| permesso di soggiorno per lavoro | 1 | 1 | no |
+| crescita professionale | 2 | 2 | no |
+
+Nessuna query concettuale cambia di una posizione. Il controllo si fa al momento con una
+scansione del testo invece di tenere un indice lessicale in memoria: su questa scala costa
+pochi millisecondi e il servizio resta a 53 MB.
+
+Nota su cosa questo **non** smentisce: resta vero che fondere denso e lessicale in modo
+indiscriminato peggiora le query concettuali, misurato due volte. Quello che le due misure
+di agosto non coprivano era la query fatta di solo nome proprio — un regime diverso, dove
+il denso non ha nulla su cui lavorare.

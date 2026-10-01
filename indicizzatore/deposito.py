@@ -232,6 +232,22 @@ class Deposito:
                 "SELECT impronta_testo, COUNT(*) FROM file WHERE impronta_testo<>''"
                 " GROUP BY impronta_testo HAVING COUNT(*)>1")}
 
+    def file_con_termine(self, termine: str, limite: int) -> list[str]:
+        """I file che contengono il termine, nel testo o nel nome, al più `limite`+1.
+
+        Serve a riconoscere gli identificatori: un nome di progetto o di cliente che
+        compare in uno o due file su centinaia. Si interroga al momento invece di
+        tenere un indice lessicale in memoria — su questa scala la scansione costa
+        pochi millisecondi e il servizio resta leggero.
+        """
+        like = "%" + termine.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        with self._lucchetto:
+            return [r[0] for r in self.db.execute(
+                "SELECT DISTINCT percorso FROM chunk"
+                " WHERE lower(testo) LIKE ? ESCAPE '\\'"
+                " UNION SELECT percorso FROM file WHERE lower(percorso) LIKE ? ESCAPE '\\'"
+                " LIMIT ?", (like, like, limite + 1))]
+
     def conteggi(self):
         with self._lucchetto:
             f = self.db.execute("SELECT COUNT(*) FROM file").fetchone()[0]

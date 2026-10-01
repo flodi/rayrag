@@ -12,6 +12,7 @@ ricaricarlo costa ~1 s, dentro il requisito dei due. Vedi docs/MISURE.md.
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import time
@@ -32,6 +33,13 @@ MODELLO = "bge-m3"
 # «contratti nordvela» passa da 4 buoni su 8 a 4 su 4, e nessuna altra query
 # perde un risultato. A 0.95 se ne perdeva uno pertinente al quarto posto.
 STACCO = 0.90
+# Quando la query è un identificatore — un nome di progetto o di cliente, non una
+# domanda — il recupero denso non ha nulla a cui somigliare e restituisce il meno
+# dissimile, cioè rumore. Misurato: «overace» passava dal posto 45 al primo.
+# La regola scatta solo se OGNI termine della query è raro: così «cosa devo pagare
+# al fisco» resta intatta anche se «fisco» in questo archivio compare in un file solo.
+QUOTA_RARO = 0.01   # raro = presente in al più l'1% dei file
+MAX_TERMINI = 3     # oltre, è una domanda, non un identificatore
 # L'indicizzatore guarda questo file per farsi da parte mentre si cerca: condividono Ollama.
 SEGNALE_QUERY = Path.home() / ".rayrag/ultima_query"
 
@@ -116,6 +124,27 @@ def frammento(testo: str, limite: int = 180) -> str:
     return t[:limite] + ("…" if len(t) > limite else "")
 
 
+def identificatore(indice, q: str) -> list[str] | None:
+    """I file che contengono tutti i termini della query, se la query è un identificatore.
+
+    Restituisce None quando la regola non si applica, così chi chiama distingue
+    «nessun file» da «non è il caso di usarla»."""
+    termini = [x for x in re.findall(r"\w+", q.lower()) if len(x) >= 3]
+    if not termini or len(termini) > MAX_TERMINI:
+        return None
+    dep = getattr(indice, "dep", None)
+    if dep is None:
+        return None
+    limite = max(1, int(len({r["path"] for r in indice.meta}) * QUOTA_RARO))
+    insieme: set[str] | None = None
+    for t in termini:
+        trovati = dep.file_con_termine(t, limite)
+        if not trovati or len(trovati) > limite:
+            return None          # termine assente, oppure comune: non è un identificatore
+        insieme = set(trovati) if insieme is None else (insieme & set(trovati))
+    return sorted(insieme or ())
+
+
 def cerca(indice, q: str, quanti: int, stacco: float = STACCO):
     punteggi = indice.m @ incorpora(q)
     # Un file vale quanto il suo chunk migliore: si cercano file, non frammenti.
@@ -125,6 +154,14 @@ def cerca(indice, q: str, quanti: int, stacco: float = STACCO):
         if path not in migliori or p > migliori[path][0]:
             migliori[path] = (float(p), i)
     ordinati = sorted(migliori.items(), key=lambda kv: -kv[1][0])
+
+    esatti = identificatore(indice, q)
+    if esatti:
+        # Si risponde con i soli file che contengono il termine, ordinati per
+        # somiglianza: la coda densa qui sarebbe rumore, e il taglio sullo stacco
+        # non ha senso perché l'ordinamento non parte più dal punteggio migliore.
+        ordinati = [x for x in ordinati if x[0] in set(esatti)]
+        stacco = 0.0
     if ordinati:
         limite = ordinati[0][1][0] * stacco
         ordinati = [x for x in ordinati if x[1][0] >= limite]
